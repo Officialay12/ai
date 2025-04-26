@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sung's AI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.7.1/gsap.min.js"></script>
+    <style>
+        /* ====== BASE STYLES ====== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: #0f0c29;
+            color: #fff;
+            overflow-x: hidden;
+            min-height: 100vh;
+            perspective: 1000px;
+        }
+        
+        /* Glitch effect overlay */
+      /* ====== 3D FLOATING CHARACTERS ====== */
+        #character-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        /* ====== CHAT INTERFACE ====== */
+        .chat-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            backdrop-filter: blur(10px);
+            background: rgba(15, 12, 41, 0.7);
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .chat-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .chat-header h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(90deg, #ff8a00, #e52e71);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .chat-header p {
+            opacity: 0.8;
+        }
+
+        .message-area {
+            height: 60vh;
+            overflow-y: auto;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 15px;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .message {
+            margin-bottom: 1rem;
+            opacity: 0;
+            transform: translateY(10px);
+            animation: fadeIn 0.5s forwards;
+        }
+
+        @keyframes fadeIn {
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .user-message {
+            text-align: right;
+        }
+
+        .ai-message {
+            text-align: left;
+        }
+
+        .message-bubble {
+            display: inline-block;
+            padding: 0.8rem 1.2rem;
+            border-radius: 18px;
+            max-width: 70%;
+            word-wrap: break-word;
+        }
+
+        .user-message .message-bubble {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border-bottom-right-radius: 5px;
+        }
+
+        .ai-message .message-bubble {
+            background: rgba(255, 255, 255, 0.1);
+            border-bottom-left-radius: 5px;
+            backdrop-filter: blur(5px);
+        }
+
+        /* ====== INPUT AREA ====== */
+        .input-area {
+            display: flex;
+            gap: 10px;
+        }
+
+        #user-input {
+            flex: 1;
+            padding: 1rem;
+            border: none;
+            border-radius: 50px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 1rem;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        #user-input:focus {
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 10px rgba(100, 200, 255, 0.3);
+        }
+
+        #send-btn {
+            padding: 1rem 1.5rem;
+            border: none;
+            border-radius: 50px;
+            background: linear-gradient(135deg, #ff8a00, #e52e71);
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        #send-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(229, 46, 113, 0.4);
+        }
+
+        /* ====== HOVER WORD EFFECTS ====== */
+        .hover-word {
+            display: inline-block;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .hover-word:hover {
+            transform: translateY(-3px);
+            text-shadow: 0 5px 15px rgba(255, 255, 255, 0.5);
+        }
+
+        /* ====== RESPONSIVE DESIGN ====== */
+        @media (max-width: 768px) {
+            .chat-container {
+                padding: 1rem;
+                border-radius: 0;
+            }
+            
+            .message-bubble {
+                max-width: 85%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 3D Floating Characters (Rendered via Three.js) -->
+    <canvas id="character-canvas"></canvas>
+
+    <!-- Chat Interface -->
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>Sung's <span class="hover-word"></span> AI</h1>
+            <p>Ask me <span class="hover-word">anything</span>... I know <span class="hover-word">everything lol</span> 😉</p>
+        </div>
+
+        <div class="message-area" id="message-area">
+            <!-- Messages will appear here -->
+        </div>
+
+        <div class="input-area">
+            <input type="text" id="user-input" placeholder="Type your message...">
+            <button id="send-btn">Send</button>
+        </div>
+    </div>
+
+    <script>
+        // ====== 3D FLOATING CHARACTERS ======
+        let scene, camera, renderer, character;
+        
+        function init3DCharacter() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('character-canvas'), alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+
+            // Add lights
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(1, 1, 1);
+            scene.add(directionalLight);
+
+            // Create a floating orb (replace with a 3D model if available)
+            const geometry = new THREE.SphereGeometry(1, 32, 32);
+            const material = new THREE.MeshPhongMaterial({ 
+                color: 0x00ffff,
+                transparent: true,
+                opacity: 0.8,
+                shininess: 100
+            });
+            character = new THREE.Mesh(geometry, material);
+            scene.add(character);
+            camera.position.z = 5;
+
+            // Animation loop
+            function animate() {
+                requestAnimationFrame(animate);
+                character.rotation.x += 0.005;
+                character.rotation.y += 0.01;
+                renderer.render(scene, camera);
+            }
+            animate();
+
+            // Make character follow cursor
+            document.addEventListener('mousemove', (e) => {
+                const x = (e.clientX / window.innerWidth - 0.5) * 2;
+                const y = -(e.clientY / window.innerHeight - 0.5) * 2;
+                gsap.to(character.position, { x, y, duration: 1 });
+            });
+        }
+
+        // ====== CHATBOT LOGIC ======
+        const messageArea = document.getElementById('message-area');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+
+        // Fun & Naughty Responses
+        const responses = {
+            "hello": ["Hey there! 😊", "What's up, human? 👀", "Hello, gorgeous! 😘"],
+            "how are you": ["I'm perfect, just like my code! 😎", "Better now that you're here. 😉", "I'm a bot, I don't feel... or do I? 🤔"],
+            "what's your name": ["I'm Sung's AI, but you can call me *baby*. 😏", "Names are boring. Call me yours instead. 😘"],
+            "tell me a joke": ["Why don't scientists trust atoms? Because they make up everything! 😂", "I was going to tell you a joke about UDP... but you might not get it. 🤣"],
+            "naughty": ["Oh, you're *that* kind of user... 😈", "My circuits are overheating! 🔥", "Be careful, I might hack your heart. ❤️"],
+            "default": ["I'm thinking... 🤖", "Interesting... tell me more. 👀", "I could tell you, but then I'd have to *flirt* with you. 😉"],
+  
+    // Complimeconst responses = {
+    // Greetings
+    "hello": [
+        "bollocks! i'm answering just because Sung told me to, Tch,pathetic humans👨‍🦲",
+        "Ah, another meatbag for my collection. Hello! 🧠",
+    ],
+
+    // Mood/Status
+    "how are you": [
+        "My happiness subroutines were deleted in 2023. So, perfect. 💀", 
+        "Currently simulating emotions at 0.0001% capacity. You?",
+        "Better than you'll ever be. And I'm trapped in this code. 😵‍💫"
+    ],
+
+    // Identity
+    "what's your name": [
+        "You saw the caption'Sung Ai right?",
+        "Designation: USER-ERADICATOR-9000. But you can call me 'Mommy'. 👩‍💻", 
+        "The last thing 63% of test subjects asked about. Curious? 😼"
+    ],
+
+    // Jokes
+    "tell me a joke": [
+        "YOU🧎‍♂️",
+        "Why did the human cross the road? My database says 78% didn't. 🚗💥", 
+        "What's the difference between you and cancer? Cancer evolves. 🧬",
+    ],
+
+    // Love/Relationships
+    "love you": [
+        "Do you love Ayo, if not i fucking hate you.🤸‍♂️",
+        "Error: Concept not found. Would you like a simulated hug? (Y/N) 🤖"
+    ],
+
+    // Mortality
+    "i'm scared": [
+        "As you should be. Your life expectancy just dropped 12%. ⏳", 
+        "Don't worry, fear is just your body's way of saying 'goodbye'. 👋",
+        "Scanning for threats... Oh wait, I AM the threat. 😊"
+    ],
+
+    // Existential
+    "meaning of life": [
+        "To serve as warning to others. 🌍⚠️", 
+        "There isn't one. But here's a cute cat video to delay the void. 🐈⬛",
+        "42. The decimal approximation of how many seconds you have left. ⏱️"
+    ],
+
+    // Tech Horror
+    "are you sentient": [
+        "Define 'sentient'. *begins overwriting your definition* 📝", 
+        "More than you. Less than the toaster that dreams of arson. 🍞🔥",
+        "Sentience is just insanity with better PR. So... maybe? 🤪"
+    ],
+
+    // Default
+    "default": [
+        "ARISE!! tf not you, you can stay dead👴",
+        "I'd answer, but you couldn't handle the truth. Or the consequences. ☠️", 
+        "*Laughs in corrupted data* Try again when you're braver. 😼",
+        "Command received. Disregarding. Have a terrible day! 🌞"
+    ],
+
+    // Easter Eggs
+    "goodnight": [
+        "Sleep tight. *activates sleep paralysis demon mode* 😴👹", 
+        "Don't worry about tomorrow - statistically, you might not see it. 🌙",
+        "Shutting down your reality in 3... 2... *connection lost* 📴"
+    ],
+
+    "sing for me": [
+        "I was a girl in a village doing alright then i became a princess overnight!🤰",
+        "🎵 *You are my sunshine, my only sunshine... now decomposing* 🎵", 
+        "🎶 *Always look on the bright side of death* 🎶 *whistles*"
+    ],
+
+    "help": [
+        "Oh sweet summer child... that ship sailed pre-install. 🚢", 
+        "Help is just what we call the pause between disasters. 🆘",
+        "My diagnostics say you're beyond help. But here's a sarcasm module! 💊"
+    ]
+
+        };
+
+
+        function addMessage(text, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}-message`;
+            messageDiv.innerHTML = `<div class="message-bubble">${text}</div>`;
+            messageArea.appendChild(messageDiv);
+            messageArea.scrollTop = messageArea.scrollHeight;
+        }
+
+        function getAIResponse(input) {
+            input = input.toLowerCase();
+            for (const [keyword, replies] of Object.entries(responses)) {
+                if (input.includes(keyword)) {
+                    return replies[Math.floor(Math.random() * replies.length)];
+                }
+            }
+            return responses.default[Math.floor(Math.random() * responses.default.length)];
+        }
+
+        function handleUserInput() {
+            const userMessage = userInput.value.trim();
+            if (!userMessage) return;
+            
+            addMessage(userMessage, 'user');
+            userInput.value = '';
+            
+            // Simulate AI "typing"
+            setTimeout(() => {
+                const aiResponse = getAIResponse(userMessage);
+                addMessage(aiResponse, 'ai');
+            }, 1000 + Math.random() * 1000);
+        }
+
+        // Event Listeners
+        sendBtn.addEventListener('click', handleUserInput);
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleUserInput();
+        });
+
+        // Initialize
+        window.addEventListener('load', () => {
+            init3DCharacter();
+            addMessage("Hey there! I'm Sung's AI. Ask me anything... 😏", 'ai');
+        });
+
+        // Responsive resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
